@@ -110,6 +110,42 @@ class ActorCriticMoECTS(nn.Module):
     def update_distribution(self, latent_and_obs):
         mean = self.actor(latent_and_obs)
         self.distribution = Normal(mean, mean*0. + self.std)
+
+    def _get_latents_for_update(self, privileged_obs, history, is_teacher):
+        if is_teacher:
+            actor_latent = self.teacher_encoder(privileged_obs)
+            value_latent = actor_latent.detach()
+        else:
+            with torch.no_grad():
+                actor_latent, _ = self.student_moe_encoder(history)
+            value_latent = actor_latent.detach()
+        return actor_latent, value_latent
+
+    def evaluate_actions_for_update(self, obs, privileged_obs, history, actions, is_teacher):
+        actor_latent, value_latent = self._get_latents_for_update(privileged_obs, history, is_teacher)
+        actor_input = torch.cat([actor_latent, obs], dim=1)
+        mean = self.actor(actor_input)
+        std = mean * 0.0 + self.std
+        distribution = Normal(mean, std)
+        actions_log_prob = distribution.log_prob(actions).sum(dim=-1)
+        entropy = distribution.entropy().sum(dim=-1)
+
+        critic_input = torch.cat([value_latent, privileged_obs], dim=1)
+        value = self.critic(critic_input)
+        return actions_log_prob, value, mean, std, entropy
+
+    def act_and_evaluate_for_rollout(self, obs, privileged_obs, history, is_teacher):
+        actor_latent, value_latent = self._get_latents_for_update(privileged_obs, history, is_teacher)
+        actor_input = torch.cat([actor_latent, obs], dim=1)
+        mean = self.actor(actor_input)
+        std = mean * 0.0 + self.std
+        distribution = Normal(mean, std)
+        actions = distribution.sample()
+        actions_log_prob = distribution.log_prob(actions).sum(dim=-1)
+
+        critic_input = torch.cat([value_latent, privileged_obs], dim=1)
+        value = self.critic(critic_input)
+        return actions, value, actions_log_prob, mean, std
     
     def act(self, obs, privileged_obs, history, is_teacher, **kwargs):
         if is_teacher:

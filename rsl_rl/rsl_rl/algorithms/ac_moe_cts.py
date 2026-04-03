@@ -134,12 +134,15 @@ class ACMoECTS(CTS):
         return real_actions
 
     def compute_returns(self, last_obs, last_privileged_obs, last_history):
+        last_values = self.get_last_values(last_obs, last_privileged_obs, last_history)
+        self.storage.compute_returns(last_values, self.gamma, self.lam)
+
+    def get_last_values(self, last_obs, last_privileged_obs, last_history):
         ti, si = self.teacher_env_idxs, self.student_env_idxs
-        last_values = torch.cat([
+        return torch.cat([
             self.model.evaluate(last_obs[ti], last_privileged_obs[ti], last_history[ti], True)[0].detach(),
             self.model.evaluate(last_obs[si], last_privileged_obs[si], last_history[si], False)[0].detach(),
         ], dim=0)
-        self.storage.compute_returns(last_values, self.gamma, self.lam)
 
     def update(self):
         mean_value_loss = 0

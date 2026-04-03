@@ -336,6 +336,9 @@ class LeggedRobotCfgCTS(BaseConfig):
         desired_kl = 0.01
         max_grad_norm = 1.
         teacher_env_ratio = 0.75  # percentage of envs assigned to teacher
+        compile = True
+        compile_mode = "reduce-overhead"
+        compile_warmup = True
         # teacher_env_ratio = 1.00  # percentage of envs assigned to teacher
 
     class runner:

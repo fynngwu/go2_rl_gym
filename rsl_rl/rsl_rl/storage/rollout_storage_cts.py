@@ -126,21 +126,35 @@ class RolloutStorageCTS:
     def clear(self):
         self.step = 0
 
-    def compute_returns(self, last_values, gamma, lam):
-        advantage = 0
-        for step in reversed(range(self.num_transitions_per_env)):
-            if step == self.num_transitions_per_env - 1:
+    @staticmethod
+    def compute_returns_and_advantages(values, rewards, dones, last_values, gamma, lam):
+        returns = torch.zeros_like(values)
+        advantage = torch.zeros_like(last_values)
+        for step in reversed(range(values.shape[0])):
+            if step == values.shape[0] - 1:
                 next_values = last_values
             else:
-                next_values = self.values[step + 1]
-            next_is_not_terminal = 1.0 - self.dones[step].float()
-            delta = self.rewards[step] + next_is_not_terminal * gamma * next_values - self.values[step]
+                next_values = values[step + 1]
+            next_is_not_terminal = 1.0 - dones[step].float()
+            delta = rewards[step] + next_is_not_terminal * gamma * next_values - values[step]
             advantage = delta + next_is_not_terminal * gamma * lam * advantage
-            self.returns[step] = advantage + self.values[step]
+            returns[step] = advantage + values[step]
 
-        # Compute and normalize the advantages
-        self.advantages = self.returns - self.values
-        self.advantages = (self.advantages - self.advantages.mean()) / (self.advantages.std() + 1e-8)
+        advantages = returns - values
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        return returns, advantages
+
+    def compute_returns(self, last_values, gamma, lam):
+        returns, advantages = self.compute_returns_and_advantages(
+            self.values,
+            self.rewards,
+            self.dones,
+            last_values,
+            gamma,
+            lam,
+        )
+        self.returns.copy_(returns)
+        self.advantages.copy_(advantages)
 
     def get_statistics(self):
         done = self.dones

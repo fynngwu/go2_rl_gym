@@ -47,6 +47,24 @@ from legged_gym.utils.helpers import class_to_dict
 from typing import Union
 from legged_gym.utils.exporter import export_policy_as_jit
 
+torch.set_float32_matmul_precision("high")
+
+
+def compile_with_cudagraph_mark(func, *, enable: bool, device: str, **kwargs):
+    if not enable:
+        return func
+
+    compiled_func = torch.compile(func, **kwargs)
+    if device == "cpu":
+        return compiled_func
+
+    def wrapped(*args, **kwargs2):
+        torch.compiler.cudagraph_mark_step_begin()
+        return compiled_func(*args, **kwargs2)
+
+    return wrapped
+
+
 def numpy_representer(dumper, data):
     return dumper.represent_float(float(data))
 
@@ -69,7 +87,7 @@ class OnPolicyRunnerCTS:
                  device='cpu'):
 
         self.cfg=train_cfg["runner"]
-        self.alg_cfg = train_cfg["algorithm"]
+        self.alg_cfg = dict(train_cfg["algorithm"])
         self.policy_cfg = train_cfg["policy"]
         self.device = device
         self.env = env
@@ -78,6 +96,9 @@ class OnPolicyRunnerCTS:
         else:
             num_critic_obs = self.env.num_obs
         history_length = train_cfg["history_length"]
+        self.compile_enabled = bool(self.alg_cfg.get("compile", False))
+        self.compile_warmup = bool(self.alg_cfg.pop("compile_warmup", True))
+        self.compile_mode = self.alg_cfg.get("compile_mode", "reduce-overhead")
         actor_critic_class = eval(self.cfg["policy_class_name"])
         model: Union[ActorCriticCTS, ActorCriticMoENGCTS, ActorCriticMCPCTS, ActorCriticACMoECTS, ActorCriticDualMoECTS, ActorCriticMoECTS] = actor_critic_class(
             self.env.num_obs,
@@ -90,6 +111,9 @@ class OnPolicyRunnerCTS:
         self.alg: Union[CTS, MoENGCTS, MCPCTS, ACMoECTS, DualMoECTS, MoECTS] = alg_class(model, self.env.num_envs, history_length, device=self.device, **self.alg_cfg)
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
+        self._eager_act = self.alg.act
+        self._eager_compute_returns = self.alg.compute_returns
+        self._compiled_gae_core = None
 
         # init storage and model
         self.alg.init_storage(self.env.num_envs, self.num_steps_per_env, [self.env.num_obs], [self.env.num_privileged_obs], [self.env.num_actions])
@@ -119,6 +143,83 @@ class OnPolicyRunnerCTS:
         except Exception as e:
             print(f"[INFO] RoboGauge client could not be initialized: {e}, disabling RoboGauge interface.")
             self.robogauge_client = None
+
+        self._setup_compile()
+
+    def _setup_compile(self):
+        if not self.compile_enabled:
+            return
+
+        print(f"[INFO] Compile OnPolicyRunnerCTS rollout and returns with mode={self.compile_mode}.")
+        self.alg.act = compile_with_cudagraph_mark(
+            self._eager_act,
+            enable=True,
+            device=self.device,
+            mode=self.compile_mode,
+        )
+        self._compiled_gae_core = compile_with_cudagraph_mark(
+            self.alg.compute_returns_and_advantages,
+            enable=True,
+            device=self.device,
+            mode=self.compile_mode,
+        )
+
+    def _disable_compiled_rollout(self, reason):
+        if not self.compile_enabled:
+            return
+
+        print(f"[WARN] Disable compiled rollout/returns and fall back to eager mode: {reason}")
+        self.compile_enabled = False
+        self.alg.act = self._eager_act
+        self._compiled_gae_core = None
+
+    def _compute_returns(self, obs, privileged_obs, history):
+        if not self.compile_enabled or self._compiled_gae_core is None:
+            if self.cfg["algorithm_class_name"] in ["ACMoECTS", "DualMoECTS"]:
+                self._eager_compute_returns(obs, privileged_obs, history)
+            else:
+                self._eager_compute_returns(privileged_obs, history)
+            return
+
+        if self.cfg["algorithm_class_name"] in ["ACMoECTS", "DualMoECTS"]:
+            last_values = self.alg.get_last_values(obs, privileged_obs, history)
+        else:
+            last_values = self.alg.get_last_values(privileged_obs, history)
+
+        returns, advantages = self._compiled_gae_core(last_values)
+        self.alg.storage.returns.copy_(returns)
+        self.alg.storage.advantages.copy_(advantages)
+
+    def _warmup_compile(self, obs, privileged_obs):
+        if not self.compile_enabled or not self.compile_warmup:
+            return
+
+        print("[INFO] Warm up compiled rollout and returns before training.")
+        history_state = self.history.detach().clone()
+        model_history_state = None
+        if hasattr(self.alg.model, "history"):
+            model_history_state = self.alg.model.history.detach().clone()
+        rng_state = torch.random.get_rng_state()
+        cuda_rng_state = torch.cuda.get_rng_state(self.device) if self.device != "cpu" else None
+
+        try:
+            warmup_obs = obs.detach().clone()
+            warmup_privileged_obs = privileged_obs.detach().clone()
+            warmup_history = self.history.flatten(1).detach().clone()
+            self.alg.act(warmup_obs, warmup_privileged_obs, warmup_history)
+            self.alg.transition.clear()
+            self._compute_returns(warmup_obs, warmup_privileged_obs, warmup_history)
+        except Exception as e:
+            self._disable_compiled_rollout(str(e))
+        finally:
+            self.history.copy_(history_state)
+            if model_history_state is not None:
+                self.alg.model.history.copy_(model_history_state)
+            self.alg.transition.clear()
+            self.alg.storage.clear()
+            torch.random.set_rng_state(rng_state)
+            if cuda_rng_state is not None:
+                torch.cuda.set_rng_state(cuda_rng_state, self.device)
     
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         # initialize writer
@@ -132,6 +233,7 @@ class OnPolicyRunnerCTS:
         obs, privileged_obs = obs.to(self.device), privileged_obs.to(self.device)
         self.history = torch.cat([self.history[:, 1:], obs.unsqueeze(1)], dim=1)
         self.alg.model.train() # switch to train mode (for dropout for example)
+        self._warmup_compile(obs, privileged_obs)
 
         ep_infos = []
         teacher_rewbuffer = deque(maxlen=100)
@@ -179,10 +281,7 @@ class OnPolicyRunnerCTS:
 
                 # Learning step
                 start = stop
-                if self.cfg["algorithm_class_name"] in ["ACMoECTS", "DualMoECTS"]:
-                    self.alg.compute_returns(obs, privileged_obs, self.history.flatten(1))
-                else:
-                    self.alg.compute_returns(privileged_obs, self.history.flatten(1))
+                self._compute_returns(obs, privileged_obs, self.history.flatten(1))
             
             if self.cfg["algorithm_class_name"] in ["CTS", "MCPCTS"]:
                 mean_value_loss, mean_surrogate_loss, mean_entropy_loss, mean_latent_loss = self.alg.update()
@@ -363,6 +462,8 @@ class OnPolicyRunnerCTS:
         if load_optimizer:
             self.alg.optimizer1.load_state_dict(loaded_dict['optimizer1_state_dict'])
             self.alg.optimizer2.load_state_dict(loaded_dict['optimizer2_state_dict'])
+            if hasattr(self.alg, "ensure_compile_optimizer_settings"):
+                self.alg.ensure_compile_optimizer_settings()
         self.current_learning_iteration = loaded_dict['iter']
         return loaded_dict['infos']
 
