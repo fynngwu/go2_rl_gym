@@ -205,14 +205,16 @@ class _OnnxPolicyExporter(torch.nn.Module):
         # copy policy parameters
         if hasattr(policy, 'student_encoder'):
             self.student_encoder = copy.deepcopy(policy.student_encoder)
+            self.obs_dim = policy.history.shape[2]
             self.forward = self.forward_cts
             self.input_dim = self.student_encoder[0].in_features
             
         elif hasattr(policy, "student_moe_encoder"):
             self.student_moe_encoder = copy.deepcopy(policy.student_moe_encoder)
             self.history_length = policy.history.shape[1]
+            self.obs_dim = policy.history.shape[2]
             self.forward = self.forward_moe_no_goal_cts
-            self.input_dim = self.history_length * policy.history.shape[2]
+            self.input_dim = self.history_length * self.obs_dim
             if hasattr(policy, "obs_no_goal_mask"):
                 self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
             else:
@@ -231,6 +233,7 @@ class _OnnxPolicyExporter(torch.nn.Module):
             self.actor = copy.deepcopy(policy.actor_mcp)
             self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
             self.history_length = policy.history.shape[1]
+            self.obs_dim = policy.history.shape[2]
             self.forward = self.forward_mcp_cts 
         else:
             raise ValueError("Policy does not have an actor/student module.")
@@ -267,50 +270,36 @@ class _OnnxPolicyExporter(torch.nn.Module):
         last_obs = history[:, -obs_dim:]
         return self.actor(last_obs)
 
-    def forward_cts(self, x):  # x is stack observations by terms
+    def forward_cts(self, x):  # x is frame-stacked history [B, history_length * obs_dim]
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
-        latent = self.student_encoder(history)
+        last_obs = x[:, -self.obs_dim:]
+        latent = self.student_encoder(x)
         x = torch.cat([latent, last_obs], dim=1)
-        
         return self.actor(x)
 
-    def forward_moe_no_goal_cts(self, x):
+    def forward_moe_no_goal_cts(self, x):  # x is frame-stacked history
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
-        history_3d = history.view(-1, self.history_length, obs_dim)
+        last_obs = x[:, -self.obs_dim:]
+        history_3d = x.view(-1, self.history_length, self.obs_dim)
         history_no_goal = history_3d[:, :, self.obs_no_goal_mask].reshape(x.shape[0], -1)
-
-        latent, weights = self.student_moe_encoder(history, history_no_goal)
+        latent, weights = self.student_moe_encoder(x, history_no_goal)
         x = torch.cat([latent, last_obs], dim=1)
-
         return self.actor(x), weights, latent
 
-    def forward_moe_cts(self, x):
+    def forward_moe_cts(self, x):  # x is frame-stacked history
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
-
-        latent, weights = self.student_moe_encoder(history)
+        last_obs = x[:, -self.obs_dim:]
+        latent, weights = self.student_moe_encoder(x)
         x = torch.cat([latent, last_obs], dim=1)
-
         return self.actor(x), weights, latent
     
-    def forward_mcp_cts(self, x):
+    def forward_mcp_cts(self, x):  # x is frame-stacked history
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
+        last_obs = x[:, -self.obs_dim:]
         obs_no_goal = last_obs[:, self.obs_no_goal_mask]
-        latent = self.student_encoder(history)
+        latent = self.student_encoder(x)
         x_in = torch.cat([latent, last_obs], dim=1)
         x_no_goal_in = torch.cat([latent, obs_no_goal], dim=1)
-        
         mean_action, _, weights = self.actor(x_in, x_no_goal_in)
         return mean_action, weights
 

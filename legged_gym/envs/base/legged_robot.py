@@ -1398,9 +1398,8 @@ class LeggedRobot(BaseTask):
         rew = (feet_xy_vel.pow(2).sum(-1) * torch.exp(-feet_height / (0.025 * self.cfg.rewards.base_height_target))).sum(-1)
         return rew
 
-    def _reward_similar_to_default(self):
-        # Penalize joint poses far away from default pose
-        return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1)
+    def _reward_stand_still(self):
+        return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * (torch.norm(self.commands[:, :3], dim=1) < 0.2)
 
     def _reward_upright(self):
         return (-1 - self.projected_gravity[:, 2]) / 2

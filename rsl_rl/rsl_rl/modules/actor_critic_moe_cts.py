@@ -135,7 +135,8 @@ class ActorCriticMoECTS(nn.Module):
         if is_teacher:
             latent = self.teacher_encoder(privileged_obs)
         else:
-            latent, _ = self.student_moe_encoder(history)
+            with torch.no_grad():
+                latent, _ = self.student_moe_encoder(history)
         x = torch.cat([latent.detach(), privileged_obs], dim=1)
         value = self.critic(x)
         return value

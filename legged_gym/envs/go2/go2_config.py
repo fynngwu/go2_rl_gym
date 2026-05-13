@@ -30,7 +30,7 @@ class GO2Cfg(LeggedRobotCfg):
         # turn_over_proportions = [0.0, 1.0, 0.0] # proportions for backflip, sideflip, noflip
 
     class env(LeggedRobotCfg.env):
-        num_envs = 8192
+        num_envs = 6200
         num_observations = 45
         # obs(45) + base_lin_vel(3) + height_measurements(187)
         num_privileged_obs = 45 + 3 + 4 + 12 + 12 + 187  # 263
@@ -44,24 +44,24 @@ class GO2Cfg(LeggedRobotCfg):
         friction_range = [0.0, 2.0]
 
         randomize_base_mass = True
-        added_mass_range = [-1., 1.]
+        added_mass_range = [-3., 2.]
 
         randomize_link_mass = True
         multiplied_link_mass_range = [0.9, 1.1]
 
         randomize_base_com = True
-        added_base_com_range = [-0.03, 0.03]
+        added_base_com_range = [-0.06, 0.03]
 
         randomize_restitution = True # restitution to robot links (Robot init)
         restitution_range = [0.0, 0.5]
 
         ### Environment reset ###
         randomize_pd_gains = True
-        stiffness_multiplier_range = [0.9, 1.1]  
-        damping_multiplier_range = [0.9, 1.1]    
+        stiffness_multiplier_range = [0.8, 1.2]  
+        damping_multiplier_range = [0.7, 1.3]    
 
         randomize_motor_zero_offset = True
-        motor_zero_offset_range = [-0.035, 0.035]
+        motor_zero_offset_range = [-0.1, 0.1]
 
         randomize_motor_strength = True # (Env reset)
         motor_strength_range = [0.8, 1.2]
@@ -78,7 +78,7 @@ class GO2Cfg(LeggedRobotCfg):
         # PD Drive parameters:
         control_type = 'P'
         stiffness = {'joint': 20.0}  # [N*m/rad]
-        damping = {'joint': 0.5}     # [N*m*s/rad]
+        damping = {'joint': 1.0}     # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
         # decimation: Number of control action updates @ sim DT per policy DT
@@ -101,21 +101,22 @@ class GO2Cfg(LeggedRobotCfg):
         resampling_time = 5. # time before command are changed[s]
         heading_command = False # if true: compute ang vel command from heading error
         # start training with zero commands and then gradually increase zero command probability
-        zero_command_curriculum = {'start_iter': 0, 'end_iter': 1500, 'start_value': 0.0, 'end_value': 0.1}
+        zero_command_curriculum = {'start_iter': 0, 'end_iter': 500, 'start_value': 0.0, 'end_value': 0.1}
         limit_ang_vel_at_zero_command_prob = 0.2 # probability of add limiting angular velocity commands when zero command is sampled
         limit_vel_prob = 0.2 # probability of limiting linear velocity command
         limit_vel_invert_when_continuous = True # invert the limit logic when using continuous sample limit velocity commands
         limit_vel = {"lin_vel_x": [-1, 1], "lin_vel_y": [-1, 1], "ang_vel_yaw": [-1, 0, 1]} # sample vel commands from min [-1] or zero [0] or max [1] range only
         stop_heading_at_limit = True # stop heading updates when vel is limited
         dynamic_resample_commands = True # sample commands with low bounds
-        command_range_curriculum = [{ # list for command range curriculums at specific training iterations
-            'iter': 20000, # training iteration at which the command ranges are updated
+        command_range_curriculum = [
+        { # list for command range curriculums at specific training iterations
+            'iter': 2000, # training iteration at which the command ranges are updated
             'lin_vel_x': [-1.0, 1.0], # min max [m/s]
             'lin_vel_y': [-1.0, 1.0], # min max [m/s]
             'ang_vel_yaw': [-1.5, 1.5], # min max [rad/s]
             'heading': [-1.57, 1.57], # min max [rad]
         }, { # list for command range curriculums at specific training iterations
-            'iter': 50000, # training iteration at which the command ranges are updated
+            'iter': 5000, # training iteration at which the command ranges are updated
             'lin_vel_x': [-2.0, 2.0], # min max [m/s]
             'lin_vel_y': [-1.0, 1.0], # min max [m/s]
             'ang_vel_yaw': [-2.0, 2.0], # min max [rad/s]
@@ -158,7 +159,7 @@ class GO2Cfg(LeggedRobotCfg):
         only_positive_rewards = False
         max_contact_force = 147. # forces above this value are penalized, go2 weight 15kg
         curriculum_rewards = [
-            {'reward_name': 'lin_vel_z', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.0},
+            {'reward_name': 'lin_vel_z', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.1},
             {'reward_name': 'correct_base_height', 'start_iter': 0, 'end_iter': 5000, 'start_value': 1.0, 'end_value': 10.0},
             # {'reward_name': 'dof_power', 'start_iter': 0, 'end_iter': 3000, 'start_value': 1.0, 'end_value': 0.1},
             # {'reward_name': 'upright', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.0},
@@ -188,11 +189,12 @@ class GO2Cfg(LeggedRobotCfg):
             collision = -1.0
             dof_pos_limits = -2.0
             feet_regulation = -0.05
+            # upright = 0.1
             # CTS reward trains to have very close feet distance, real robot performance is poor, but sim2sim can climb 20cm stairs, try to add hip_to_default reward or similar_to_default reward
             # training to y=1.5, font feet will collide noticeably, max y=1.0
             hip_to_default = -0.05
             # legs_distance = -1.5  # not good performance, avoid leg collision
-            # similar_to_default = -0.01
+            stand_still = -2
             # feet_contact_forces = -1.0  # try to add but no effect, remove
 
         turn_over_roll_threshold = math.pi / 4 # threshold on roll to use turn over rewards

@@ -143,6 +143,8 @@ def get_args():
 
         {"name": "--robogauge", "action": "store_true", "default": False, "help": "Enable robogauge evaluation interface."},
         {"name": "--robogauge_port", "type": int, "default": 9973, "help": "Port for robogauge evaluation interface."},
+        {"name": "--play_terrain", "type": str, "default": "stairs_up", "help": "Terrain type for play.py: flat, stairs_up, stairs_down, slope_up, slope_down, wave, obstacles."},
+        {"name": "--play_difficulty", "type": float, "default": 0.35, "help": "Terrain difficulty for play.py in [0, 1]."},
     ]
     # parse arguments
     args = gymutil.parse_arguments(

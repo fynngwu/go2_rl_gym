@@ -90,15 +90,19 @@ class CTS:
         self.lam = lam
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
-        self.teacher_num_envs = max(int(num_envs * teacher_env_ratio), 1)
-        self.student_num_envs = num_envs - self.teacher_num_envs
-        student_env_ratio = 1 - teacher_env_ratio
-        self.teacher_env_idxs = torch.tensor([i for i in range(num_envs) if i % int(1/student_env_ratio) != 0], device=self.device)
-        self.student_env_idxs = torch.tensor([i for i in range(num_envs) if i % int(1/student_env_ratio) == 0], device=self.device)
-        # self.teacher_env_idxs = torch.arange(num_envs, device=self.device)
-        # self.student_env_idxs = []
-        assert len(self.teacher_env_idxs) == self.teacher_num_envs, f"{len(self.teacher_env_idxs)=} != {self.teacher_num_envs=}"
-        assert len(self.student_env_idxs) == self.student_num_envs, f"{len(self.student_env_idxs)=} != {self.student_num_envs=}"
+        if num_envs <= 1:
+            self.teacher_num_envs = 1
+            self.student_num_envs = 0
+            self.teacher_env_idxs = torch.arange(num_envs, device=self.device)
+            self.student_env_idxs = torch.tensor([], dtype=torch.long, device=self.device)
+        else:
+            self.teacher_num_envs = max(int(num_envs * teacher_env_ratio), 1)
+            self.student_num_envs = num_envs - self.teacher_num_envs
+            student_env_ratio = 1 - teacher_env_ratio
+            self.teacher_env_idxs = torch.tensor([i for i in range(num_envs) if i % int(1/student_env_ratio) != 0], device=self.device)
+            self.student_env_idxs = torch.tensor([i for i in range(num_envs) if i % int(1/student_env_ratio) == 0], device=self.device)
+            assert len(self.teacher_env_idxs) == self.teacher_num_envs, f"{len(self.teacher_env_idxs)=} != {self.teacher_num_envs=}"
+            assert len(self.student_env_idxs) == self.student_num_envs, f"{len(self.student_env_idxs)=} != {self.student_num_envs=}"
 
     def init_storage(self, num_envs, num_transitions_per_env, actor_obs_shape, critic_obs_shape, action_shape):
         self.storage = RolloutStorageCTS(num_envs, self.teacher_num_envs, self.history_length, num_transitions_per_env, actor_obs_shape, critic_obs_shape, action_shape, self.device)

@@ -12,14 +12,61 @@ from legged_gym.utils.exporter import export_policy_as_jit, export_policy_as_onn
 import numpy as np
 import torch
 
+def configure_play_terrain(env_cfg, terrain_name, difficulty):
+    difficulty = float(np.clip(difficulty, 0.0, 1.0))
+    terrain_name = terrain_name.lower()
+    env_cfg.terrain.num_rows = 1
+    env_cfg.terrain.num_cols = 1
+    env_cfg.terrain.curriculum = False
+    env_cfg.terrain.selected = True
+    env_cfg.terrain.max_init_terrain_level = 0
+
+    if terrain_name == "flat":
+        env_cfg.terrain.terrain_kwargs = {
+            'type': 'terrain_utils.random_uniform_terrain',
+            'terrain_kwargs': {'min_height': 0.0, 'max_height': 0.0, 'step': 0.005, 'downsampled_scale': 0.2},
+        }
+    elif terrain_name in ["stairs_up", "stairs_down"]:
+        step_height = 0.05 + 0.23 * difficulty
+        if terrain_name == "stairs_up":
+            step_height *= -1
+        env_cfg.terrain.terrain_kwargs = {
+            'type': 'terrain_utils.pyramid_stairs_terrain',
+            'terrain_kwargs': {'step_width': 0.31, 'step_height': step_height, 'platform_size': 3.0},
+        }
+    elif terrain_name in ["slope_up", "slope_down"]:
+        slope = 0.1 + 0.52 * difficulty
+        if terrain_name == "slope_down":
+            slope *= -1
+        env_cfg.terrain.terrain_kwargs = {
+            'type': 'terrain_utils.pyramid_sloped_terrain',
+            'terrain_kwargs': {'slope': slope, 'platform_size': 3.0},
+        }
+    elif terrain_name == "wave":
+        env_cfg.terrain.terrain_kwargs = {
+            'type': 'terrain_utils.wave_terrain',
+            'terrain_kwargs': {'num_waves': 5, 'amplitude': 0.1 + 0.2 * difficulty},
+        }
+    elif terrain_name == "obstacles":
+        env_cfg.terrain.terrain_kwargs = {
+            'type': 'terrain_utils.discrete_obstacles_terrain',
+            'terrain_kwargs': {
+                'max_height': 0.05 + 0.25 * difficulty,
+                'min_size': 1.0,
+                'max_size': 2.0,
+                'num_rects': 20,
+                'platform_size': 3.0,
+            },
+        }
+    else:
+        raise ValueError(f"Unsupported play terrain: {terrain_name}")
+
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
     # override some parameters for testing
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
     # env_cfg.terrain.mesh_type = 'plane'
-    env_cfg.terrain.num_rows = 7
-    env_cfg.terrain.num_cols = 7
-    env_cfg.terrain.curriculum = False
+    configure_play_terrain(env_cfg, args.play_terrain, args.play_difficulty)
     env_cfg.noise.add_noise = False
     env_cfg.domain_rand.randomize_friction = False
     env_cfg.domain_rand.push_robots = False
