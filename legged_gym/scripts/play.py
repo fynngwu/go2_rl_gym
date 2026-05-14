@@ -66,7 +66,8 @@ def play(args):
     # override some parameters for testing
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
     # env_cfg.terrain.mesh_type = 'plane'
-    configure_play_terrain(env_cfg, args.play_terrain, args.play_difficulty)
+    if "parkour" not in args.task:
+        configure_play_terrain(env_cfg, args.play_terrain, args.play_difficulty)
     env_cfg.noise.add_noise = False
     env_cfg.domain_rand.randomize_friction = False
     env_cfg.domain_rand.push_robots = False
@@ -80,6 +81,13 @@ def play(args):
 
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
+    if "parkour" in args.task:
+        print(
+            "[parkour play] terrain: "
+            f"num_rows={env.cfg.terrain.num_rows}, num_cols={env.cfg.terrain.num_cols}, "
+            f"heightfield={env.terrain.tot_rows}x{env.terrain.tot_cols}",
+            flush=True,
+        )
     obs = env.get_observations()
     # load policy
     train_cfg.runner.resume = True

@@ -57,8 +57,8 @@ class GO2Cfg(LeggedRobotCfg):
 
         ### Environment reset ###
         randomize_pd_gains = True
-        stiffness_multiplier_range = [0.8, 1.2]  
-        damping_multiplier_range = [0.7, 1.3]    
+        stiffness_multiplier_range = [0.9, 1.1]  
+        damping_multiplier_range = [0.9, 1.1]    
 
         randomize_motor_zero_offset = True
         motor_zero_offset_range = [-0.1, 0.1]
@@ -77,8 +77,8 @@ class GO2Cfg(LeggedRobotCfg):
     class control(LeggedRobotCfg.control):
         # PD Drive parameters:
         control_type = 'P'
-        stiffness = {'joint': 20.0}  # [N*m/rad]
-        damping = {'joint': 1.0}     # [N*m*s/rad]
+        stiffness = {'joint': 40.0}  # [N*m/rad]
+        damping = {'joint': 2.5}     # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
         # decimation: Number of control action updates @ sim DT per policy DT

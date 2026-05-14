@@ -27,7 +27,7 @@ class DogV2Cfg(GO2Cfg):
         }
 
     class asset(GO2Cfg.asset):
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/dog_v2/urdf/dog_v2_2_4.urdf'
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/dog_v2_description/urdf/dog_v2_2_4.urdf'
         name = "dog_v2"
         foot_name = "foot"
         penalize_contacts_on = ["thigh", "calf"]
