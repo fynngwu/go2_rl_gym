@@ -68,6 +68,9 @@ def play(args):
     # env_cfg.terrain.mesh_type = 'plane'
     if "parkour" not in args.task:
         configure_play_terrain(env_cfg, args.play_terrain, args.play_difficulty)
+    else:
+        env_cfg.env.num_envs = min(env_cfg.env.num_envs, 2)
+        env_cfg.terrain.horizontal_scale = max(env_cfg.terrain.horizontal_scale, 0.1)
     env_cfg.noise.add_noise = False
     env_cfg.domain_rand.randomize_friction = False
     env_cfg.domain_rand.push_robots = False
@@ -92,6 +95,8 @@ def play(args):
     # load policy
     train_cfg.runner.resume = True
     runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
+    if hasattr(runner.alg.model, "history"):
+        runner.alg.model.history = runner.alg.model.history.to(env.device)
     policy = runner.get_inference_policy(device=env.device)
     
     # export policy as a jit module (used to run it from C++)

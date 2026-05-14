@@ -15,29 +15,28 @@ class DogV2ParkourHurdleCfg(DogV2Cfg):
         next_goal_threshold = 0.2
         reach_goal_delay = 0.1
         num_future_goal_obs = 2
-        hurdle_sensor_range = 3.0
-        hurdle_sensor_height_threshold = 0.08
+        goal_distance_range = 4.0
 
     class depth:
         use_camera = False
 
     class viewer(DogV2Cfg.viewer):
-        pos = [90.0, -12.0, 45.0]
-        lookat = [90.0, 2.0, 0.0]
+        pos = [40.0, -12.0, 45.0]
+        lookat = [40.0, 2.0, 0.0]
 
     class terrain(DogV2Cfg.terrain):
         mesh_type = "trimesh"
         curriculum = True
-        terrain_length = 18.0
+        terrain_length = 8.0
         terrain_width = 4.0
         num_rows = 10
-        num_cols = 1
+        num_cols = 32
         max_init_terrain_level = 2
         horizontal_scale = 0.05
         vertical_scale = 0.005
         border_size = 5.0
         measure_heights = True
-        num_goals = 8
+        num_goals = 2
         y_range = [-0.4, 0.4]
         edge_width_thresh = 0.05
         draw_edge_mask = True

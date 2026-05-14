@@ -28,12 +28,6 @@ class DogV2ParkourHurdleRobot(DogV2Robot):
         self.next_target_yaw = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.x_edge_mask = torch.tensor(self.terrain.x_edge_mask, device=self.device)
         self.last_torques = torch.zeros_like(self.torques)
-        self.hurdle_sensor_offsets = torch.arange(
-            self.cfg.terrain.horizontal_scale,
-            self.cfg.env.hurdle_sensor_range + 1e-6,
-            self.cfg.terrain.horizontal_scale,
-            device=self.device,
-        )
         self._update_goals()
         assert self.num_dof == 12
         assert self.num_actions == 12
@@ -64,10 +58,7 @@ class DogV2ParkourHurdleRobot(DogV2Robot):
         self.custom_origins = True
         self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float)
         self.env_class = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
-        max_init_level = self.cfg.terrain.max_init_terrain_level
-        if not self.cfg.terrain.curriculum:
-            max_init_level = self.cfg.terrain.num_rows - 1
-        self.terrain_levels = torch.randint(0, max_init_level + 1, (self.num_envs,), device=self.device)
+        self.terrain_levels = torch.arange(self.num_envs, device=self.device) % self.cfg.terrain.num_rows
         per_col = self.num_envs / self.cfg.terrain.num_cols
         self.terrain_types = torch.div(
             torch.arange(self.num_envs, device=self.device),
@@ -144,14 +135,13 @@ class DogV2ParkourHurdleRobot(DogV2Robot):
         if not self.init_done:
             return
         goal_counts = self.cur_goal_idx[env_ids]
-        move_up = goal_counts >= self.cfg.terrain.num_goals
-        move_down = goal_counts < max(1, self.cfg.terrain.num_goals // 3)
+        reached_any_goal = goal_counts >= 1
+        rand = torch.rand(len(env_ids), device=self.device)
+        move_up = reached_any_goal & (rand < 0.5)
+        failed = ~reached_any_goal
+        move_down = failed & (rand < 0.1)
         self.terrain_levels[env_ids] += move_up.long() - move_down.long()
-        self.terrain_levels[env_ids] = torch.where(
-            self.terrain_levels[env_ids] >= self.max_terrain_level,
-            torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
-            torch.clamp(self.terrain_levels[env_ids], min=0),
-        )
+        self.terrain_levels[env_ids] = torch.clamp(self.terrain_levels[env_ids], min=0, max=self.max_terrain_level - 1)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
         self.env_class[env_ids] = self.terrain_class[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
@@ -235,27 +225,13 @@ class DogV2ParkourHurdleRobot(DogV2Robot):
         return torch.sum(torch.square(self.dof_pos - self.default_dof_pos), dim=1)
 
     def _get_goal_cmd_obs(self):
-        """Goal command: heading error, forward hurdle distance, target speed."""
+        """Goal command: heading error, current-goal distance, target speed."""
         delta_yaw = wrap_to_pi(self.target_yaw - self.rpy[:, 2])
-        distance = self._get_forward_hurdle_distance() / self.cfg.env.hurdle_sensor_range
+        distance = torch.norm(self.target_pos_rel, dim=-1) / self.cfg.env.goal_distance_range
+        distance = torch.clamp(distance, 0.0, 1.0)
         speed = self.commands[:, 0] * self.obs_scales.lin_vel
 
         return torch.stack((delta_yaw, distance, speed), dim=-1)
-
-    def _get_forward_hurdle_distance(self):
-        ray_x = self.root_states[:, 0:1] + self.hurdle_sensor_offsets.unsqueeze(0)
-        ray_y = self.root_states[:, 1:2].expand_as(ray_x)
-        scale = self.cfg.terrain.horizontal_scale
-        border = self.cfg.terrain.border_size
-        x_ids = ((ray_x + border) / scale).round().long().clamp(0, self.height_samples.shape[0] - 1)
-        y_ids = ((ray_y + border) / scale).round().long().clamp(0, self.height_samples.shape[1] - 1)
-        heights = self.height_samples[x_ids, y_ids] * self.cfg.terrain.vertical_scale
-        hit = heights > self.cfg.env.hurdle_sensor_height_threshold
-        hit_ids = torch.argmax(hit.float(), dim=1)
-        has_hit = hit.any(dim=1)
-        distances = self.hurdle_sensor_offsets[hit_ids]
-        max_dist = torch.full_like(distances, self.cfg.env.hurdle_sensor_range)
-        return torch.where(has_hit, distances, max_dist)
 
     def _print_play_goal_command(self):
         goal_cmd_obs = self._get_goal_cmd_obs()[0]
@@ -265,7 +241,6 @@ class DogV2ParkourHurdleRobot(DogV2Robot):
             f"target_speed={self.commands[0, 0].item():.3f} m/s, "
             f"delta_yaw={goal_cmd_obs[0].item():.3f} rad, "
             f"goal_dist={goal_dist:.3f} m, "
-            f"hurdle_sensor={goal_cmd_obs[1].item() * self.cfg.env.hurdle_sensor_range:.3f} m, "
-            f"hurdle_sensor_obs={goal_cmd_obs[1].item():.3f}",
+            f"goal_dist_obs={goal_cmd_obs[1].item():.3f}",
             flush=True,
         )

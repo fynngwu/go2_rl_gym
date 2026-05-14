@@ -65,37 +65,27 @@ class ParkourHurdleTerrain:
         goals = np.zeros((cfg.num_goals, 2), dtype=np.float32)
 
         mid_y = terrain.length // 2
-        dis_x_min = round(1.2 / terrain.horizontal_scale)
-        dis_x_max = round(2.2 / terrain.horizontal_scale)
-        dis_y_min = round(cfg.y_range[0] / terrain.horizontal_scale)
-        dis_y_max = round(cfg.y_range[1] / terrain.horizontal_scale)
         platform_len = round(2.5 / terrain.horizontal_scale)
         wall_len = max(1, round(1.0 / terrain.horizontal_scale))
         wall_width = max(1, round(0.05 / terrain.horizontal_scale))
-        wall_height = np.clip(0.15 + 0.20 * difficulty + np.random.uniform(-0.01, 0.01), 0.15, 0.35)
-        wall_height = round(wall_height / terrain.vertical_scale)
+        wall_height_m = np.clip(0.05 + 0.30 * difficulty, 0.05, 0.35)
+        wall_height = round(wall_height_m / terrain.vertical_scale)
+        first_hurdle_x = round(4.0 / terrain.horizontal_scale)
+        hurdle_spacing = round(2.0 / terrain.horizontal_scale)
+        goal_after_hurdle = round(0.6 / terrain.horizontal_scale)
         pad_width = int(0.1 / terrain.horizontal_scale)
         pad_height = 0
 
         terrain.height_field_raw[0:platform_len, :] = 0
-        dis_x = platform_len
-        goals[0] = [platform_len - 1, mid_y]
-        for idx in range(cfg.num_goals - 2):
-            rand_x = np.random.randint(dis_x_min, dis_x_max)
-            rand_y = np.random.randint(dis_y_min, dis_y_max)
-            dis_x += rand_x
+        for idx in range(cfg.num_goals):
+            dis_x = first_hurdle_x + idx * hurdle_spacing
             x0 = max(dis_x - wall_width // 2, 0)
             x1 = min(x0 + wall_width, terrain.width)
-            y_center = mid_y + rand_y
-            y0 = max(y_center - wall_len // 2, 0)
+            y0 = max(mid_y - wall_len // 2, 0)
             y1 = min(y0 + wall_len, terrain.length)
             terrain.height_field_raw[x0:x1, y0:y1] = wall_height
-            goals[idx + 1] = [dis_x - rand_x // 2, mid_y + rand_y]
+            goals[idx] = [min(dis_x + goal_after_hurdle, terrain.width - 1), mid_y]
 
-        final_dis_x = dis_x + np.random.randint(dis_x_min, dis_x_max)
-        if final_dis_x > terrain.width:
-            final_dis_x = terrain.width - 0.5 // terrain.horizontal_scale
-        goals[-1] = [final_dis_x, mid_y]
         terrain.goals = goals * terrain.horizontal_scale
 
         terrain.height_field_raw[:, :pad_width] = pad_height
