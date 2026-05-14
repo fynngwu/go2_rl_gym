@@ -49,7 +49,9 @@ def draw_edge_mask(env):
                 continue
             y0 = seg[0] * env.terrain.cfg.horizontal_scale - env.terrain.cfg.border_size
             y1 = seg[-1] * env.terrain.cfg.horizontal_scale - env.terrain.cfg.border_size
-            z = env.height_samples[x_id, seg].max().detach().cpu().item() * env.terrain.cfg.vertical_scale + 0.04
+            x_start = max(0, x_id - 1)
+            x_end = min(env.height_samples.shape[0], x_id + 2)
+            z = env.height_samples[x_start:x_end, seg].max().detach().cpu().item() * env.terrain.cfg.vertical_scale + 0.04
             vertices.extend([[x, y0, z], [x, y1, z]])
             colors.append([1.0, 0.0, 1.0])
     if vertices:

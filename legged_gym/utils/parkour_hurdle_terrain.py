@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.ndimage import binary_dilation
 from collections import defaultdict
 
 from isaacgym import terrain_utils
@@ -39,9 +38,6 @@ class ParkourHurdleTerrain:
             cfg.vertical_scale,
             cfg.slope_threshold,
         )
-        half_edge_width = max(1, int(np.ceil(cfg.edge_width_thresh / cfg.horizontal_scale)))
-        structure = np.ones((half_edge_width * 2 + 1, 1), dtype=bool)
-        self.x_edge_mask = binary_dilation(self.x_edge_mask, structure=structure)
 
     def _build_map(self):
         difficulty_den = max(self.cfg.num_rows - 1, 1)
@@ -68,8 +64,7 @@ class ParkourHurdleTerrain:
         platform_len = round(2.5 / terrain.horizontal_scale)
         wall_len = max(1, round(1.0 / terrain.horizontal_scale))
         wall_width = max(1, round(0.05 / terrain.horizontal_scale))
-        wall_height_m = np.clip(0.05 + 0.30 * difficulty, 0.05, 0.35)
-        wall_height = round(wall_height_m / terrain.vertical_scale)
+        wall_height_base = (0.15 + 0.25 * difficulty) / terrain.vertical_scale
         first_hurdle_x = round(4.0 / terrain.horizontal_scale)
         hurdle_spacing = round(2.0 / terrain.horizontal_scale)
         goal_after_hurdle = round(0.6 / terrain.horizontal_scale)
@@ -83,8 +78,13 @@ class ParkourHurdleTerrain:
             x1 = min(x0 + wall_width, terrain.width)
             y0 = max(mid_y - wall_len // 2, 0)
             y1 = min(y0 + wall_len, terrain.length)
+            noise = round(np.random.normal(0, 0.03 / terrain.vertical_scale))
+            wall_height = max(round(wall_height_base + noise), 0)
             terrain.height_field_raw[x0:x1, y0:y1] = wall_height
             goals[idx] = [min(dis_x + goal_after_hurdle, terrain.width - 1), mid_y]
+
+        # smooth roughness noise on ground
+        terrain_utils.random_uniform_terrain(terrain, min_height=-0.02, max_height=0.02, step=0.005, downsampled_scale=0.3)
 
         terrain.goals = goals * terrain.horizontal_scale
 

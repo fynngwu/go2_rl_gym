@@ -32,7 +32,7 @@ class DogV2ParkourHurdleCfg(DogV2Cfg):
         num_rows = 10
         num_cols = 32
         max_init_terrain_level = 2
-        horizontal_scale = 0.05
+        horizontal_scale = 0.1
         vertical_scale = 0.005
         border_size = 5.0
         measure_heights = True
