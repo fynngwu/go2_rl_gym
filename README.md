@@ -21,6 +21,17 @@
 
 Follow the step-by-step setup guide in [setup.md](doc/setup_en.md).
 
+Quick start:
+
+```bash
+conda create -n gym python=3.8
+conda activate gym
+# Install Isaac Gym and dependencies following setup.md
+
+# Start training
+python legged_gym/scripts/train.py --task=dog_v2_cts --headless
+```
+
 ## 🛠️ Usage Guide
 
 ### 1. Train
