@@ -44,7 +44,7 @@ class GO2Cfg(LeggedRobotCfg):
         friction_range = [0.0, 2.0]
 
         randomize_base_mass = True
-        added_mass_range = [-3., 2.]
+        added_mass_range = [-2., 2.]
 
         randomize_link_mass = True
         multiplied_link_mass_range = [0.9, 1.1]
@@ -61,7 +61,7 @@ class GO2Cfg(LeggedRobotCfg):
         damping_multiplier_range = [0.9, 1.1]    
 
         randomize_motor_zero_offset = True
-        motor_zero_offset_range = [-0.1, 0.1]
+        motor_zero_offset_range = [-0.05, 0.05]
 
         randomize_motor_strength = True # (Env reset)
         motor_strength_range = [0.8, 1.2]
@@ -77,8 +77,10 @@ class GO2Cfg(LeggedRobotCfg):
     class control(LeggedRobotCfg.control):
         # PD Drive parameters:
         control_type = 'P'
-        stiffness = {'joint': 40.0}  # [N*m/rad]
-        damping = {'joint': 2.5}     # [N*m*s/rad]
+        stiffness = {'joint': 15.0}  # [N*m/rad], can be a single value or a dict with joint specific stiffness
+        # stiffness = {'hip': 15.0,'thigh': 15.0,'calf': 25.0}  # [N*m/rad]
+        damping = {'joint': 0.5}     # [N*m*s/rad]
+        # damping = {'hip': 0.5,'thigh': 0.5,'calf': 1.0}     # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
         # decimation: Number of control action updates @ sim DT per policy DT
@@ -155,12 +157,12 @@ class GO2Cfg(LeggedRobotCfg):
   
     class rewards(LeggedRobotCfg.rewards):
         soft_dof_pos_limit = 0.9
-        base_height_target = 0.38
+        base_height_target = 0.29
         only_positive_rewards = False
         max_contact_force = 147. # forces above this value are penalized, go2 weight 15kg
         curriculum_rewards = [
-            {'reward_name': 'lin_vel_z', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.1},
-            {'reward_name': 'correct_base_height', 'start_iter': 0, 'end_iter': 5000, 'start_value': 1.0, 'end_value': 10.0},
+            {'reward_name': 'lin_vel_z', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.4},
+            {'reward_name': 'correct_base_height', 'start_iter': 0, 'end_iter': 5000, 'start_value': 1.0, 'end_value': 8.0},
             # {'reward_name': 'dof_power', 'start_iter': 0, 'end_iter': 3000, 'start_value': 1.0, 'end_value': 0.1},
             # {'reward_name': 'upright', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.0},
         ]
