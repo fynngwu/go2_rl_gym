@@ -24,8 +24,8 @@ Follow the step-by-step setup guide in [setup.md](doc/setup_en.md).
 Quick start:
 
 ```bash
-conda create -n gym python=3.8
-conda activate gym
+conda create -n unitree-rl python=3.8
+conda activate unitree-rl
 # Install Isaac Gym and dependencies following setup.md
 
 # Start training

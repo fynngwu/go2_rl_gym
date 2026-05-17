@@ -24,8 +24,8 @@
 快速开始：
 
 ```bash
-conda create -n gym python=3.8
-conda activate gym
+conda create -n unitree-rl python=3.8
+conda activate unitree-rl
 # 按照 setup.md 安装 Isaac Gym 及依赖
 
 # 启动训练
